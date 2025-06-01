@@ -4,7 +4,7 @@ include(../sdk/config.cmake)
 project(sieelf_nstopwatch2 C)
 
 include_directories("../libsie/src/include")
-link_libraries(crt crt_helper gcc c)
+link_libraries(crt crt_helper gcc c m z png ft sie)
 file(GLOB_RECURSE SOURCES "src/*.c")
 
 add_executable(NStopWatch2_ELKA ${SOURCES})
