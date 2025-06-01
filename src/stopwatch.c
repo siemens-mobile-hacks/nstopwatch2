@@ -7,15 +7,13 @@
 #define STOPWATCH_PD_ID 0x200C
 
 void DestroyStopwatch(STOPWATCH *stopwatch) {
-    if (stopwatch) {
-        if (stopwatch->timings) {
-            mfree(stopwatch->timings);
-        }
-        mfree(stopwatch);
+    if (stopwatch->timings) {
+        mfree(stopwatch->timings);
     }
+    mfree(stopwatch);
 }
 
-static void AddTiming(t_timing **timings, int *size, const char *s, const char *e) {
+static void AddTiming(t_timing **timings, uint32_t *size, const char *s, const char *e) {
     char ms[32];
     size_t len = e - s;
     strncpy(ms, s, len);
@@ -25,7 +23,7 @@ static void AddTiming(t_timing **timings, int *size, const char *s, const char *
     (*timings)[(*size) - 1] = strtoll(ms, NULL, 10);
 }
 
-t_timing *GetTimings(const char *str, int *size) {
+t_timing *GetTimings(const char *str, uint32_t *size) {
     char *p = (char*)str;
     t_timing *timings = NULL;
     *size = 0;
@@ -39,13 +37,19 @@ t_timing *GetTimings(const char *str, int *size) {
         AddTiming(&timings, size, p, e);
         p = e + 1;
     }
-    (*size)++;
-    timings = realloc(timings, sizeof(t_timing) * *size); //NOLINT
-    timings[(*size) - 1] = -1;
+    if (*size < 2) {
+        timings = realloc(timings, sizeof(t_timing) * 2); // NOLINT
+        timings[0] = 0;
+        timings[1] = 0;
+        *size = 2;
+    }
     return timings;
 }
 
 STOPWATCH *ReadPDFile() {
+    STOPWATCH *stopwatch = malloc(sizeof(STOPWATCH));
+    zeromem(stopwatch, sizeof(STOPWATCH));
+
     char key[32];
     char value[256];
     uint32_t len;
@@ -53,27 +57,22 @@ STOPWATCH *ReadPDFile() {
     len = 256;
     sprintf(key, "%s", "status");
     if (ReadValueFromPDFile(STOPWATCH_PD_ID, key, value, &len) != 0) {
-        return NULL;
+        stopwatch->type = STOPWATCH_TYPE_LAP;
+        stopwatch->timings = GetTimings(NULL, &(stopwatch->timings_size));
+        return stopwatch;
     }
     value[len] = '\0';
 
-    STOPWATCH *stopwatch = malloc(sizeof(STOPWATCH));
-    zeromem(stopwatch, sizeof(STOPWATCH));
     if (value[2] == 'L') {
         stopwatch->type = STOPWATCH_TYPE_LAP;
     } else {
         stopwatch->type = STOPWATCH_TYPE_SPLIT;
     }
 
-    if (value[0] == 'I') { // Reset``
+    if (value[0] == 'I') { // Reset
+        stopwatch->timings = GetTimings(NULL, &(stopwatch->timings_size));
     } else {
-        int size = 0;
-        t_timing *timings = GetTimings(strchr(&value[4], ',') + 1, &size);
-        if (size < 2) {
-            mfree(timings);
-        } else {
-            stopwatch->timings = timings;
-        }
+        stopwatch->timings = GetTimings(&value[4], &(stopwatch->timings_size));
     }
     return stopwatch;
 }
@@ -91,10 +90,9 @@ int WriteStatusToPDFile(const STOPWATCH *stopwatch) {
     } else {
         value[2] = 'S'; // Split
     }
-    int i = 0;
-    while (stopwatch->timings[i] != -1) {
+    for (int i = 0; i < stopwatch->timings_size; i++) {
         char timing[32];
-        sprintf(timing, ",%d", stopwatch->timings[i++]);
+        sprintf(timing, ",%d", stopwatch->timings[i]);
         strcat(value, timing);
     }
     return (WriteValueToPDFile(STOPWATCH_PD_ID, "status", value, strlen(value)) == 0);

@@ -4,9 +4,7 @@
 #include <stdio.h>
 #include "../ipc.h"
 #include "../time.h"
-#include "../stopwatch.h"
 #include "ui.h"
-
 #include "icons.h"
 #include "menu_options.h"
 
@@ -29,10 +27,10 @@ static SOFTKEYSTAB SOFTKEYS_TAB = {
 };
 
 static void AddTiming(UI_DATA *data, t_timing timing) {
-    data->timings_size++;
-    data->timings = realloc(data->timings, sizeof(t_timing) * data->timings_size); // NOLINT
-    data->timings[data->timings_size - 1] = timing;
-    data->first_timing_id = data->timings_size - 1;
+     data->stopwatch->timings_size++;
+     data->stopwatch->timings = realloc(data->stopwatch->timings, sizeof(t_timing) * data->stopwatch->timings_size); // NOLINT
+     data->stopwatch->timings[data->stopwatch->timings_size - 1] = timing;
+     data->first_timing_id = data->stopwatch->timings_size - 1;
 }
 
 int BuildUICanvas(const RECT *rc, int flag) {
@@ -101,19 +99,19 @@ void DrawTimings(int y) {
     WSHDR ws_timing;
     uint16_t wsbody_timing[16];
     CreateLocalWS(&ws_timing, wsbody_timing, 15);
-    for (int i = (int)data->first_timing_id; i >= 0; i--) {
+    for (uint32_t i = data->first_timing_id; i >= 2; i--) {
         if (data->first_timing_id - i > 9 - 1) {
             break;
         }
-        t_timing timing = data->timings[i];
-        if (data->type == STOPWATCH_TYPE_LAP) {
-            if (i > 0) {
-                timing -= data->timings[i - 1];
+        t_timing timing = data->stopwatch->timings[i];
+        if (data->stopwatch->type == STOPWATCH_TYPE_LAP) {
+            if (i > 2) {
+                timing -= data->stopwatch->timings[i - 1];
             }
         }
         GetTimeFromMilliseconds(&time, timing);
         PutTimingIntoWS(&ws_timing, time.hour, time.min, time.sec, time.millisec);
-        wsprintf(&ws, "(%02d) %w", i + 1, &ws_timing)
+        wsprintf(&ws, "(%02d) %w", i - 1, &ws_timing)
 
         y2 = y + GetFontYSIZE(FONT_SMALL);
         DrawString(&ws, x, y, x2, y2, FONT_SMALL, TEXT_ALIGNMIDDLE,
@@ -132,12 +130,12 @@ static void OnRedraw(GUI *) {
 
     int y = DrawTime() + 2;
     DrawLine(gui->canvas->x, y, gui->canvas->x2, y, 0, GetPaletteAdrByColorIndex(PC_FOREGROUND));
-    if (data->timings) {
+    if (data->stopwatch->timings_size > 2) {
         y += 3;
         DrawTimings(y);
     } else {
         y += 20;
-        PutTimingNameIntoWS(&ws, data->type);
+        PutTimingNameIntoWS(&ws, data->stopwatch->type);
         DrawString(&ws, gui->canvas->x, y, gui->canvas->x2, y + GetFontYSIZE(FONT_MEDIUM), FONT_MEDIUM,
             TEXT_ALIGNMIDDLE, GetPaletteAdrByColorIndex(PC_FOREGROUND), GetPaletteAdrByColorIndex(0x17));
     }
@@ -151,48 +149,46 @@ static void ExpirationRoutine() {
     }
     MILLISECONDS = ms;
     if (IPC_IS_ALLOW_REDRAW_TIME) {
-        IPC_RedrawTime();
+        static IPC_REQ ipc;
         IPC_IS_ALLOW_REDRAW_TIME = 0;
+        IPC_Send(&ipc, IPC_REDRAW_TIME);
     }
 }
 
 void StartStopwatch(GUI *gui) {
     UI_DATA *data = TViewGetUserPointer(gui);
-    data->start_time = GetMillisecondsFromDateTimeSince1997();
-    data->was_ever_started = 1;
-    NU_Control_Timer(&(data->nu_timer), NU_ENABLE_TIMER);
+    data->stopwatch->enable = 1;
+    data->stopwatch->timings[1] = GetMilliseconds();
+    NU_Control_Timer(&(data->stopwatch->nu_timer), NU_ENABLE_TIMER);
 }
 
 void StopStopwatch(GUI *gui) {
     UI_DATA *data = TViewGetUserPointer(gui);
 
-    data->start_time = 0;
-    NU_Control_Timer(&(data->nu_timer), NU_DISABLE_TIMER);
+    data->stopwatch->enable = 0;
+    NU_Control_Timer(&(data->stopwatch->nu_timer), NU_DISABLE_TIMER);
 }
 
 void ResetStopwatch(GUI *gui) {
     UI_DATA *data = TViewGetUserPointer(gui);
     StopStopwatch(gui);
-    if (data->timings) {
-        mfree(data->timings);
-    }
-    data->timings = NULL;
-    data->timings_size = 0;
-
-    data->was_ever_started = 0;
-    data->first_timing_id = 0;
+    data->stopwatch->timings_size = 2;
+    data->stopwatch->timings = realloc(data->stopwatch->timings, sizeof(t_timing) * data->stopwatch->timings_size); //NOLINT
+    data->stopwatch->timings[0] = 0;
+    data->stopwatch->timings[1] = 0;
+    data->first_timing_id = data->stopwatch->timings_size - 1;
     InitGlobalDateTime(0, 0);
-    NU_Reset_Timer(&(data->nu_timer), ExpirationRoutine, 5, 5, NU_DISABLE_TIMER);
+    NU_Reset_Timer(&(data->stopwatch->nu_timer), ExpirationRoutine, 5, 5, NU_DISABLE_TIMER);
 }
 
 void SetLapTiming(GUI *gui) {
     UI_DATA *data = TViewGetUserPointer(gui);
-    data->type = STOPWATCH_TYPE_LAP;
+    data->stopwatch->type = STOPWATCH_TYPE_LAP;
 }
 
 void SetSplitTiming(GUI *gui) {
     UI_DATA *data = TViewGetUserPointer(gui);
-    data->type = STOPWATCH_TYPE_SPLIT;
+    data->stopwatch->type = STOPWATCH_TYPE_SPLIT;
 }
 
 static int OnKey(GUI *gui, GUI_MSG *msg) {
@@ -203,26 +199,27 @@ static int OnKey(GUI *gui, GUI_MSG *msg) {
     } else if (msg->keys == 0x18) {
         MenuOptions_Create(gui);
     } else if (msg->keys == 0xFF) {
-        if (data->start_time) {
+        if (data->stopwatch->enable) {
             double milliseconds = GetMilliseconds();
             AddTiming(data, (t_timing)milliseconds);
             DirectRedrawGUI();
         }
     } else if (msg->keys == 0x3D) {
-        if (!data->start_time) {
+        if (!data->stopwatch->enable) {
             StartStopwatch(gui);
         } else {
             StopStopwatch(gui);
         }
         DirectRedrawGUI();
+
     } else if (msg->gbsmsg->msg == KEY_DOWN || msg->gbsmsg->msg == LONG_PRESS) {
         if (msg->gbsmsg->submess == UP_BUTTON) {
-            if (data->first_timing_id < data->timings_size - 1) {
+            if (data->first_timing_id < data->stopwatch->timings_size - 1) {
                 data->first_timing_id++;
                 DirectRedrawGUI();
             }
         } else if (msg->gbsmsg->submess == DOWN_BUTTON) {
-            if (data->first_timing_id >= 9) {
+            if (data->first_timing_id >= 9 + 2) {
                 data->first_timing_id--;
                 DirectRedrawGUI();
             }
@@ -236,14 +233,14 @@ static void GHook(GUI *gui, int cmd) {
 
     if (cmd == TI_CMD_REDRAW) {
         int lsk_id = 0;
-        if (data->start_time) {
-            if (data->type == STOPWATCH_TYPE_LAP) {
+        if (data->stopwatch->enable) {
+            if (data->stopwatch->type == STOPWATCH_TYPE_LAP) {
                 lsk_id = 1;
             } else {
                 lsk_id = 2;
             }
         }
-        SOFTKEY_D[3].lgp_id = (data->start_time) ? LGP_STOP_PIC : LGP_PLAY_PIC;
+        SOFTKEY_D[3].lgp_id = (data->stopwatch->enable) ? LGP_STOP_PIC : LGP_PLAY_PIC;
 
         SetMenuSoftKey(gui, &SOFTKEY_D[lsk_id], SET_LEFT_SOFTKEY);
         SetMenuSoftKey(gui, &SOFTKEY_D[3], SET_MIDDLE_SOFTKEY);
@@ -256,29 +253,13 @@ static void GHook(GUI *gui, int cmd) {
         gui_methods.onRedraw = OnRedraw;
         m[1] = &gui_methods;
 
-        NU_Create_Timer(&(data->nu_timer), "NStopWatch2", ExpirationRoutine, 0,
+        NU_Create_Timer(&(data->stopwatch->nu_timer), "NStopWatch2", ExpirationRoutine, 0,
                5, 5, NU_DISABLE_TIMER);
+        data->first_timing_id = data->stopwatch->timings_size - 1;
     } else if (cmd == TI_CMD_FOCUS) {
         IPC_IS_ALLOW_REDRAW_TIME = 1;
     } else if (cmd == TI_CMD_UNFOCUS) {
         IPC_IS_ALLOW_REDRAW_TIME = 0;
-    } else if (cmd == TI_CMD_DESTROY) {
-        NU_Control_Timer(&(data->nu_timer), NU_DISABLE_TIMER);
-        NU_Delete_Timer(&(data->nu_timer));
-
-        STOPWATCH stopwatch;
-        stopwatch.type = data->type;
-        stopwatch.timings = malloc(sizeof(t_timing) * (data->timings_size + 3));
-        stopwatch.timings[0] = 0;
-        stopwatch.timings[1] = GetMilliseconds();
-        memcpy(&(stopwatch.timings[2]), data->timings, sizeof(t_timing) * data->timings_size);
-        stopwatch.timings[data->timings_size + 2] = -1;
-        if (data->timings) {
-            mfree(data->timings);
-        }
-        if (!WriteStatusToPDFile(&stopwatch)) {
-            MsgBoxError(1, (int)"Couldn't write status to PD file!");
-        }
     }
 }
 
@@ -297,28 +278,22 @@ static TVIEW_DESC TVIEW_D = {
     0,
 };
 
-int CreateUI(const STOPWATCH *stopwatch) {
+int CreateUI(STOPWATCH *stopwatch) {
     memcpy(&(HEADER_D.rc), GetHeaderRECT(), sizeof(RECT));
     memcpy(&(TVIEW_D.rc), GetMainAreaRECT(), sizeof(RECT));
 
     UI_DATA *data = malloc(sizeof(UI_DATA));
     zeromem(data, sizeof(UI_DATA));
-    int global_time_offset = 0;
-    int global_time_milliseconds = 0;
-    if (stopwatch) {
-        if (stopwatch->timings) {
-            data->was_ever_started = 1;
-            global_time_offset = ((int)stopwatch->timings[0]) / 1000;
-            global_time_milliseconds = ((int)stopwatch->timings[0]) % 1000;
-
-            int i = 1;
-            while (stopwatch->timings[i] != -1) {
-                AddTiming(data, stopwatch->timings[i++]);
-            }
+    if (!INITIAL_TIMESTAMP) {
+        int global_time_offset = 0;
+        int global_time_milliseconds = 0;
+        if (stopwatch->timings[1]) {
+            global_time_offset = ((int)stopwatch->timings[1]) / 1000;
+            global_time_milliseconds = ((int)stopwatch->timings[1]) % 1000;
         }
-        data->type = stopwatch->type;
+        InitGlobalDateTime(global_time_offset, global_time_milliseconds);
     }
-    InitGlobalDateTime(global_time_offset, global_time_milliseconds);
+    data->stopwatch = stopwatch;
 
     void *mfree = mfree_adr();
     void *malloc = malloc_adr();

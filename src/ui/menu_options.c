@@ -102,12 +102,12 @@ int MenuOptions_Create(GUI *gui) {
     int items_count = 0;
     int to_remove[ITEMS_N + 1];
 
-    if (ui_data->was_ever_started) {
+    if (ui_data->stopwatch->timings[1]) {
         to_remove[++items_count] = MENU_ITEM_START;
     } else {
         to_remove[++items_count] = MENU_ITEM_RESUME;
     }
-    if (ui_data->type == STOPWATCH_TYPE_LAP) {
+    if (ui_data->stopwatch->type == STOPWATCH_TYPE_LAP) {
         to_remove[++items_count] = MENU_ITEM_LAP_TIMING;
     } else {
         to_remove[++items_count] = MENU_ITEM_SPLIT_TIMING;
