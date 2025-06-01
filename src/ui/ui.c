@@ -260,6 +260,8 @@ static void GHook(GUI *gui, int cmd) {
         IPC_IS_ALLOW_REDRAW_TIME = 1;
     } else if (cmd == TI_CMD_UNFOCUS) {
         IPC_IS_ALLOW_REDRAW_TIME = 0;
+    } else if (cmd == TI_CMD_DESTROY) {
+        mfree(data);
     }
 }
 

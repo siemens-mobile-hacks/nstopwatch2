@@ -47,19 +47,20 @@ t_timing *GetTimings(const char *str, uint32_t *size) {
 }
 
 STOPWATCH *ReadPDFile() {
+    #define BUF_SIZE (1024 * 1024)
+
     STOPWATCH *stopwatch = malloc(sizeof(STOPWATCH));
     zeromem(stopwatch, sizeof(STOPWATCH));
 
     char key[32];
-    char value[256];
-    uint32_t len;
+    char *value = malloc(BUF_SIZE);
+    uint32_t len = BUF_SIZE;
 
-    len = 256;
     sprintf(key, "%s", "status");
     if (ReadValueFromPDFile(STOPWATCH_PD_ID, key, value, &len) != 0) {
         stopwatch->type = STOPWATCH_TYPE_LAP;
         stopwatch->timings = GetTimings(NULL, &(stopwatch->timings_size));
-        return stopwatch;
+        goto EXIT;
     }
     value[len] = '\0';
 
@@ -74,12 +75,16 @@ STOPWATCH *ReadPDFile() {
     } else {
         stopwatch->timings = GetTimings(&value[4], &(stopwatch->timings_size));
     }
-    return stopwatch;
+    EXIT:
+        mfree(value);
+        return stopwatch;
 }
 
 int WriteStatusToPDFile(const STOPWATCH *stopwatch) {
-    char value[1024];
-    sprintf(value, "S,L");
+    char *value = malloc(stopwatch->timings_size * 32);
+    value[0] = '\0';
+    strcat(value, "S,L");
+    
     if (stopwatch->timings[1] == 0) {
         value[0] = 'I'; //Reset
     } else {
@@ -90,10 +95,13 @@ int WriteStatusToPDFile(const STOPWATCH *stopwatch) {
     } else {
         value[2] = 'S'; // Split
     }
+
+    char timing[32];
     for (int i = 0; i < stopwatch->timings_size; i++) {
-        char timing[32];
         sprintf(timing, ",%d", stopwatch->timings[i]);
         strcat(value, timing);
     }
-    return (WriteValueToPDFile(STOPWATCH_PD_ID, "status", value, strlen(value)) == 0);
+    int result = (WriteValueToPDFile(STOPWATCH_PD_ID, "status", value, strlen(value)) == 0);
+    mfree(value);
+    return result;
 }

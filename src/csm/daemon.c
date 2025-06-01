@@ -46,7 +46,6 @@ static int OnMessage(CSM_RAM *data, GBS_MSG *msg) {
         }
     } else if (msg->msg == MSG_IPC) {
         IPC_REQ *ipc = msg->data0;
-
         if (strcmpi(ipc->name_to, IPC_NAME) == 0) {
             if (msg->submess == IPC_CREATE_DAEMON_CSM) {
                 int ipc_csm_id = (int)ipc->data;
