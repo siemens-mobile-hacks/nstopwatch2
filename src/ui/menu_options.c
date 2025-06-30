@@ -7,16 +7,16 @@
 
 static HEADER_DESC HEADER_D = {{0, 0, 0, 0},NULL, (int)"Options", LGP_NULL};
 
-static const int SOFTKEYS[] = {SET_LEFT_SOFTKEY, SET_RIGHT_SOFTKEY, SET_MIDDLE_SOFTKEY};
+static const int SOFTKEYS[] = {SET_LEFT_SOFTKEY, SET_MIDDLE_SOFTKEY, SET_RIGHT_SOFTKEY};
 
 static const SOFTKEY_DESC SOFTKEYS_D[]= {
     {0x0018,0x0000,(int)"Select"},
+    {0x003D,0x0000,(int)LGP_DOIT_PIC},
     {0x0001,0x0000,(int)"Back"},
-    {0x003D,0x0000,(int)LGP_DOIT_PIC}
 };
 
 static const SOFTKEYSTAB SOFTKEYS_TAB = {
-    SOFTKEYS_D,0
+    SOFTKEYS_D, 3
 };
 
 enum MenuItems {
@@ -30,31 +30,36 @@ enum MenuItems {
 
 static void Start_Proc(GUI *gui) {
     void *data = MenuGetUserPointer(gui);
+
     StartStopwatch(data);
     GeneralFuncF1(1);
 }
 
 static void Reset_Proc(GUI *gui) {
     void *data = MenuGetUserPointer(gui);
+
     ResetStopwatch(data);
     GeneralFuncF1(1);
 }
 
 static void LapTiming_Proc(GUI *gui) {
     void *data = MenuGetUserPointer(gui);
+
     SetLapTiming(data);
     GeneralFuncF1(1);
 }
 
 static void SplitTiming_Proc(GUI *gui) {
     void *data = MenuGetUserPointer(gui);
+
     SetSplitTiming(data);
     GeneralFuncF1(1);
 }
 
 static void Exit_Proc(GUI *gui) {
     void *data = MenuGetUserPointer(gui);
-    UI_DATA *ui_data = TViewGetUserPointer(data);
+    UI_DATA *ui_data = EDIT_GetUserPointer(data);
+
     GeneralFuncF1(1);
     GeneralFunc_flag1(ui_data->gui_id, 1);
 }
@@ -94,7 +99,7 @@ static const MENU_DESC MENU_D = {
 };
 
 int MenuOptions_Create(GUI *gui) {
-    UI_DATA *ui_data = TViewGetUserPointer(gui);
+    UI_DATA *ui_data = EDIT_GetUserPointer(gui);
 
     RECT *rc = GetOptionsHeaderRect();
     memcpy(&(HEADER_D.rc), rc, sizeof(RECT));

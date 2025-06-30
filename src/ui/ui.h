@@ -5,11 +5,12 @@
 typedef struct {
     int gui_id;
     STOPWATCH *stopwatch;
-    uint32_t first_timing_id;
+    uint32_t timing_id;
 } UI_DATA;
 
 int CreateUI(STOPWATCH *stopwatch);
-int DrawTime();
+void UpdateTime(GUI *gui);
+void RedrawTime(GUI *gui);
 
 void StartStopwatch(GUI *gui);
 void StopStopwatch(GUI *gui);

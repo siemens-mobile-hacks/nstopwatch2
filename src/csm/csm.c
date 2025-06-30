@@ -26,7 +26,11 @@ static int OnMessage(CSM_RAM *data, GBS_MSG *msg) {
                 csm->gui_id = CreateUI(ipc->data);
             } else if (msg->submess == IPC_REDRAW_TIME) {
                 if (IsGuiOnTop(csm->gui_id)) {
-                    DrawTime();
+                    GUI *gui = FindGUIbyId(csm->gui_id, &data);
+                    if (gui) {
+                        UpdateTime(gui);
+                        RedrawTime(gui);
+                    }
                     IPC_IS_ALLOW_REDRAW_TIME = 1;
                 }
             }
